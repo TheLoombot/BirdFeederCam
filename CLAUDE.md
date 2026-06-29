@@ -33,9 +33,19 @@ Vision / Core ML bird recognition as future work.
 - When motion in the box exceeds the threshold (and a cooldown has elapsed), the app
   captures the frame and saves it to Photos, updating the status and count.
 
+## Repository layout
+
+Standard single-project Xcode layout at the repo root:
+
+```
+BirdFeederCam.xcodeproj/      # the Xcode project
+BirdFeederCam/                # app source (the target's synchronized folder)
+CLAUDE.md, .gitignore, ...
+```
+
 ## Architecture / file map
 
-All source lives in `BirdFeederCam/BirdFeederCam/`:
+All source lives in `BirdFeederCam/`:
 
 | File | Role |
 |------|------|
@@ -71,13 +81,10 @@ multiplies by the canvas size to draw, and clamps dragging so the box stays on-s
 
 ## Known rough edges / gotchas
 
-- **Duplicate Xcode project layout.** There are two `.xcodeproj` bundles:
-  `./BirdFeederCam.xcodeproj` (original) and `./BirdFeederCam/BirdFeederCam.xcodeproj`
-  (added when the source was reorganized into the nested `BirdFeederCam/BirdFeederCam/`
-  folder). Confirm which one actually builds the current source before relying on it;
-  consider consolidating to a single project.
-- `Info.plist` keys are also expected to be set in the Xcode target (the README has you
-  add them manually). The standalone `Info.plist` here documents the required keys.
+- **Info.plist wiring.** The project sets `INFOPLIST_FILE = BirdFeederCam/Info.plist`
+  with `GENERATE_INFOPLIST_FILE = YES`, so Xcode merges the generated keys into the
+  hand-written `Info.plist` (which carries `NSCameraUsageDescription` and
+  `NSPhotoLibraryAddUsageDescription`). If you add usage keys, edit that file.
 - Motion detection is naive pixel-difference — lighting changes, shadows, and wind will
   trigger false saves. The 8s cooldown is the only debounce.
 - No persistence of settings, no in-app gallery, no recognition/labeling.
