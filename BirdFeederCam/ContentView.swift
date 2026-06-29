@@ -48,8 +48,11 @@ struct ContentView: View {
                     }
                     .buttonStyle(.bordered)
 
-                    Slider(value: $camera.motionThreshold, in: 0.02...0.20) {
-                        Text("Sensitivity")
+                    VStack(spacing: 2) {
+                        Text(String(format: "Sensitivity (threshold): %.2f", camera.motionThreshold))
+                            .font(.caption)
+                            .monospacedDigit()
+                        Slider(value: $camera.motionThreshold, in: 0.02...0.20)
                     }
                     .frame(maxWidth: 260)
                 }

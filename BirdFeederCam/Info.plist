@@ -6,5 +6,7 @@
 	<string>Camera is used to watch the bird feeder.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Photos are saved when bird feeder motion is detected.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photos are saved to a "Bird Feeder Cam" album when motion is detected.</string>
 </dict>
 </plist>

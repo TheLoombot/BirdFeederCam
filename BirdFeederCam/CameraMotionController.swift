@@ -20,6 +20,7 @@ final class CameraMotionController: NSObject, ObservableObject {
     private var currentImage: UIImage?
     private var lastSaveDate = Date.distantPast
     private let cooldownSeconds: TimeInterval = 8
+    private let albumName = "Bird Feeder Cam"
 
     func requestPermissionAndConfigure() {
         Task {
@@ -105,16 +106,68 @@ final class CameraMotionController: NSObject, ObservableObject {
     }
 
     private func saveToPhotos(_ image: UIImage) {
-        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
-            guard status == .authorized || status == .limited else {
-                Task { @MainActor in self.statusText = "Photos permission needed to save" }
+        // Adding to a custom album requires full read/write access, not add-only.
+        PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
+            guard status == .authorized else {
+                Task { @MainActor in
+                    self.statusText = status == .limited
+                        ? "Grant full Photos access to use the album"
+                        : "Photos permission needed to save"
+                }
                 return
             }
-            UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
-            Task { @MainActor in
-                self.savedCount += 1
-                self.statusText = "Saved photo to Photos"
+            self.saveImage(image, toAlbumNamed: self.albumName)
+        }
+    }
+
+    /// Saves the image into the named album, creating the album if it doesn't exist.
+    /// (iOS keeps every asset in the main library too; the album is an additional grouping.)
+    /// `nonisolated` so it can run from PhotoKit's background completion closures; it
+    /// hops back to the main actor only to update the `@Published` state.
+    private nonisolated func saveImage(_ image: UIImage, toAlbumNamed name: String) {
+        func addAsset(to collection: PHAssetCollection?) {
+            PHPhotoLibrary.shared().performChanges {
+                let creation = PHAssetChangeRequest.creationRequestForAsset(from: image)
+                if let collection,
+                   let placeholder = creation.placeholderForCreatedAsset,
+                   let albumChange = PHAssetCollectionChangeRequest(for: collection) {
+                    albumChange.addAssets([placeholder] as NSArray)
+                }
+            } completionHandler: { success, error in
+                Task { @MainActor in
+                    if success {
+                        self.savedCount += 1
+                        self.statusText = "Saved to \"\(name)\" album"
+                    } else {
+                        self.statusText = "Save failed: \(error?.localizedDescription ?? "unknown error")"
+                    }
+                }
             }
+        }
+
+        let fetchOptions = PHFetchOptions()
+        fetchOptions.predicate = NSPredicate(format: "title = %@", name)
+        let albums = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: fetchOptions)
+
+        if let existing = albums.firstObject {
+            addAsset(to: existing)
+            return
+        }
+
+        // No album yet — create it, then add the asset.
+        var placeholder: PHObjectPlaceholder?
+        PHPhotoLibrary.shared().performChanges {
+            let request = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: name)
+            placeholder = request.placeholderForCreatedAssetCollection
+        } completionHandler: { success, error in
+            guard success, let id = placeholder?.localIdentifier else {
+                Task { @MainActor in
+                    self.statusText = "Could not create album: \(error?.localizedDescription ?? "unknown error")"
+                }
+                return
+            }
+            let created = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [id], options: nil)
+            addAsset(to: created.firstObject)
         }
     }
 

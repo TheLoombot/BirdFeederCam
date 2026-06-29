@@ -29,9 +29,11 @@ Vision / Core ML bird recognition as future work.
   - **Start / Stop** — begins/ends the capture session and motion watching.
   - **Test Save** — saves the most recent frame immediately (used to confirm
     Photos permissions work).
-  - **Sensitivity slider** — adjusts the motion threshold (0.02–0.20; lower = more sensitive).
+  - **Sensitivity slider** — adjusts the motion threshold (0.02–0.20; lower = more
+    sensitive). The current threshold value is shown live above the slider.
 - When motion in the box exceeds the threshold (and a cooldown has elapsed), the app
-  captures the frame and saves it to Photos, updating the status and count.
+  captures the frame and saves it into a **"Bird Feeder Cam" album** in Photos,
+  updating the status and count.
 
 ## Repository layout
 
@@ -72,9 +74,14 @@ In `CameraMotionController`:
    0…1 (`averageDiff`).
 5. If `averageDiff > motionThreshold` **and** more than `cooldownSeconds` (8s) have
    passed since the last save, the full frame is rendered to a `UIImage`
-   (`CIImage` → `CIContext.createCGImage`) and saved via
-   `UIImageWriteToSavedPhotosAlbum`.
-6. Photos add-only authorization is requested lazily at first save.
+   (`CIImage` → `CIContext.createCGImage`) and saved into the **"Bird Feeder Cam"
+   album** (`saveImage(_:toAlbumNamed:)` finds-or-creates the album via PhotoKit:
+   `PHAssetChangeRequest` + `PHAssetCollectionChangeRequest`).
+6. Photos **read/write** authorization is requested lazily at first save — full access
+   is required because album management can't be done with add-only access. The asset
+   still lands in the main library too; the album is an additional grouping, not a move.
+   `Info.plist` therefore declares both `NSPhotoLibraryAddUsageDescription` and
+   `NSPhotoLibraryUsageDescription`.
 
 Coordinates: `watchRegion` / `feederRect` are normalized `CGRect`s (0…1). `FeederOverlay`
 multiplies by the canvas size to draw, and clamps dragging so the box stays on-screen.
