@@ -1,10 +1,3 @@
-//
-//  BirdFeederCamApp.swift
-//  BirdFeederCam
-//
-//  Created by Aman on 6/27/26.
-//
-
 import SwiftUI
 
 @main

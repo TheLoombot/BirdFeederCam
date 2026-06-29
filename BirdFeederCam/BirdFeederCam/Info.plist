@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera is used to watch the bird feeder.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Photos are saved when bird feeder motion is detected.</string>
+</dict>
+</plist>
