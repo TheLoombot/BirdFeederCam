@@ -18,9 +18,9 @@ final class CameraMotionController: NSObject, ObservableObject {
     private let output = AVCaptureVideoDataOutput()
     private let queue = DispatchQueue(label: "BirdFeederCam.VideoFrames")
     private var previousSample: [UInt8]?
-    private var currentImage: UIImage?
     private var lastSaveDate = Date.distantPast
     private let cooldownSeconds: TimeInterval = 8
+    private var shutterPlayer: AVAudioPlayer?
     let albumName = "Bird Feeder Cam"
 
     func requestPermissionAndConfigure() {
@@ -31,8 +31,36 @@ final class CameraMotionController: NSObject, ObservableObject {
                 return
             }
             configureSession()
+            prepareShutterSound()
             startSession()
         }
+    }
+
+    /// Prepares the capture sound and routes it through the `.playback` audio session
+    /// category so it is audible even when the ringer/silent switch is off.
+    private func prepareShutterSound() {
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            // Non-fatal: if the session can't be configured we simply won't hear the sound.
+        }
+        // Prefer the genuine iOS camera-shutter sound; fall back to the bundled tone.
+        // Playing it through an AVAudioPlayer (rather than AudioServicesPlaySystemSound)
+        // means the .playback category applies, so it's heard even with the ringer off.
+        let systemShutter = URL(fileURLWithPath: "/System/Library/Audio/UISounds/photoShutter.caf")
+        let url = FileManager.default.fileExists(atPath: systemShutter.path)
+            ? systemShutter
+            : Bundle.main.url(forResource: "shutter", withExtension: "wav")
+        if let url {
+            shutterPlayer = try? AVAudioPlayer(contentsOf: url)
+            shutterPlayer?.prepareToPlay()
+        }
+    }
+
+    private func playShutter() {
+        shutterPlayer?.currentTime = 0
+        shutterPlayer?.play()
     }
 
     private func configureSession() {
@@ -73,9 +101,7 @@ final class CameraMotionController: NSObject, ObservableObject {
         guard !session.isRunning else { return }
         queue.async { [session] in session.startRunning() }
         isCameraLive = true
-        statusText = isWatching
-            ? "Watching feeder region"
-            : "Camera live. Drag the box over the feeder, then tap Start to save photos."
+        if !isWatching { statusText = "Ready" }
     }
 
     /// Arms motion watching: photos are saved when motion is detected inside the box.
@@ -91,14 +117,6 @@ final class CameraMotionController: NSObject, ObservableObject {
         guard isWatching else { return }
         isWatching = false
         statusText = "Paused. Camera is live but not saving."
-    }
-
-    func saveCurrentFrameForTesting() {
-        guard let image = currentImage else {
-            statusText = "No frame yet"
-            return
-        }
-        saveToPhotos(image)
     }
 
     @MainActor private func handle(pixelBuffer: CVPixelBuffer) async {
@@ -121,7 +139,6 @@ final class CameraMotionController: NSObject, ObservableObject {
             lastSaveDate = Date()
             let image = imageFromPixelBuffer(pixelBuffer)
             self.statusText = String(format: "Motion detected: %.3f", averageDiff)
-            self.currentImage = image
             if let image { self.saveToPhotos(image) }
         }
     }
@@ -159,6 +176,7 @@ final class CameraMotionController: NSObject, ObservableObject {
                     if success {
                         self.savedCount += 1
                         self.statusText = "Saved to \"\(name)\" album"
+                        self.playShutter()
                     } else {
                         self.statusText = "Save failed: \(error?.localizedDescription ?? "unknown error")"
                     }

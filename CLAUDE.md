@@ -25,21 +25,25 @@ Vision / Core ML bird recognition as future work.
   after camera permission is granted) — the camera does not wait for the Start button.
 - A **draggable yellow box** ("Drag box over feeder") marks the watch region.
   Only this region is monitored for motion.
-- A status card (top-left) shows current state, a running **"Photos saved"** count,
-  the destination **album name**, and an **Open in Photos** button.
-- A **"WATCHING" / "PAUSED" badge** (top-right) plus a **red border around the whole
-  screen** make it obvious when motion-saving is armed. (Camera-live vs. armed are
-  distinct states: the preview is always live; Start/Stop only toggles saving.)
-- Bottom control bar:
-  - **Start / Stop** — arms/disarms *motion saving* (not the camera itself). Stop turns
-    red while armed. The camera stays live either way.
-  - **Test Save** — saves the most recent frame immediately (used to confirm
-    Photos permissions work).
-  - **Sensitivity slider** — adjusts the motion threshold (0.02–0.20; lower = more
-    sensitive). The current threshold value is shown live above the slider.
+- A compact status card (top-left) shows current state, a running **"Photos saved"**
+  count, the destination **album name**, and an **Open in Photos** button.
+- **Lower-left controls:** a large **Start / Stop** button (green Start / red Stop) with
+  a **"WATCHING" / "PAUSED" badge** right beside it. A **red border around the whole
+  screen** also appears while armed. (Camera-live vs. armed are distinct states: the
+  preview is always live; Start/Stop only toggles saving.)
+- **Vertical sensitivity slider** on the right edge — **up = more sensitive**, down =
+  less. Labeled "Sensitivity" ("More"/"Less" at the ends); the numeric value is not
+  shown. It maps inversely to the underlying motion threshold (0.02–0.20; lower = more
+  sensitive) via a computed `Binding` in `ContentView`.
 - When armed and motion in the box exceeds the threshold (and a cooldown has elapsed),
-  the app captures the frame and saves it into a **"Bird Feeder Cam" album** in Photos,
-  updating the status and count.
+  the app captures the frame, saves it into a **"Bird Feeder Cam" album** in Photos,
+  and plays a **capture sound** (see below).
+- **Capture sound:** the genuine iOS camera shutter (`/System/Library/Audio/UISounds/
+  photoShutter.caf`) played via `AVAudioPlayer` under the **`.playback`** audio-session
+  category, so it's audible **even with the ringer/silent switch off**. Falls back to a
+  bundled `shutter.wav` tone if the system file is unavailable. (Played through
+  `AVAudioPlayer` rather than `AudioServicesPlaySystemSound` specifically so the
+  mute-ignoring `.playback` category applies.)
 - **Open in Photos** opens the Photos app — iOS has no public API to deep-link to a
   specific album, so it can't jump straight to "Bird Feeder Cam".
 
@@ -61,7 +65,8 @@ All source lives in `BirdFeederCam/`:
 |------|------|
 | `BirdFeederCamApp.swift` | `@main` App entry point; hosts `ContentView` in a `WindowGroup`. |
 | `ContentView.swift` | Root view. Composes the camera preview, draggable overlay, status card, and control bar. Owns the `CameraMotionController` (`@StateObject`) and the normalized feeder rect. |
-| `CameraMotionController.swift` | The core. `@MainActor ObservableObject` that owns the `AVCaptureSession`, requests permissions, runs motion detection on each frame, and saves photos. |
+| `CameraMotionController.swift` | The core. `@MainActor ObservableObject` that owns the `AVCaptureSession`, requests permissions, runs motion detection on each frame, saves photos, and plays the capture sound. |
+| `shutter.wav` | Fallback capture tone (generated) used only if the system shutter `.caf` is unavailable. Bundled automatically by the synchronized group. |
 | `CameraPreview.swift` | `UIViewRepresentable` wrapper exposing an `AVCaptureVideoPreviewLayer`-backed `UIView` to SwiftUI. |
 | `FeederOverlay.swift` | The draggable yellow watch-region box. Operates in normalized (0…1) coordinates, scaled to the canvas size. |
 | `Info.plist` | Declares `NSCameraUsageDescription` and `NSPhotoLibraryAddUsageDescription`. |
