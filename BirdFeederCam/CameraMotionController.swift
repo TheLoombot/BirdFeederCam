@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Photos
 import UIKit
 import Combine
@@ -51,8 +51,16 @@ final class CameraMotionController: NSObject, ObservableObject {
         output.setSampleBufferDelegate(self, queue: queue)
         if session.canAddOutput(output) { session.addOutput(output) }
 
-        if let connection = output.connection(with: .video), connection.isVideoOrientationSupported {
-            connection.videoOrientation = .landscapeRight
+        if let connection = output.connection(with: .video) {
+            if #available(iOS 17.0, *) {
+                // 90° corresponds to landscapeRight for a back camera feed
+                let angle: CGFloat = 90
+                if connection.isVideoRotationAngleSupported(angle) {
+                    connection.videoRotationAngle = angle
+                }
+            } else if connection.isVideoOrientationSupported {
+                connection.videoOrientation = .landscapeRight
+            }
         }
 
         session.commitConfiguration()
@@ -81,7 +89,7 @@ final class CameraMotionController: NSObject, ObservableObject {
         saveToPhotos(image)
     }
 
-    private func handle(pixelBuffer: CVPixelBuffer) {
+    @MainActor private func handle(pixelBuffer: CVPixelBuffer) async {
         let sample = downsampleRegion(pixelBuffer: pixelBuffer, region: watchRegion, grid: 24)
         guard !sample.isEmpty else { return }
 
@@ -97,11 +105,9 @@ final class CameraMotionController: NSObject, ObservableObject {
         if averageDiff > motionThreshold, Date().timeIntervalSince(lastSaveDate) > cooldownSeconds {
             lastSaveDate = Date()
             let image = imageFromPixelBuffer(pixelBuffer)
-            Task { @MainActor in
-                self.statusText = String(format: "Motion detected: %.3f", averageDiff)
-                self.currentImage = image
-                if let image { self.saveToPhotos(image) }
-            }
+            self.statusText = String(format: "Motion detected: %.3f", averageDiff)
+            self.currentImage = image
+            if let image { self.saveToPhotos(image) }
         }
     }
 
@@ -214,6 +220,9 @@ final class CameraMotionController: NSObject, ObservableObject {
 extension CameraMotionController: AVCaptureVideoDataOutputSampleBufferDelegate {
     nonisolated func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        Task { @MainActor in self.handle(pixelBuffer: buffer) }
+        // Hop to the main actor to handle the pixel buffer without capturing it in a @Sendable closure
+        Task { @MainActor in
+            await self.handle(pixelBuffer: buffer)
+        }
     }
 }
