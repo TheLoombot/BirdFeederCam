@@ -246,7 +246,9 @@ final class CameraMotionController: NSObject, ObservableObject {
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
         let context = CIContext()
         guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return nil }
-        return UIImage(cgImage: cgImage, scale: 1, orientation: .right)
+        // The capture connection already rotates the buffer upright (videoRotationAngle = 90),
+        // so use .up here — tagging it .right would rotate it an extra 90°.
+        return UIImage(cgImage: cgImage, scale: 1, orientation: .up)
     }
 }
 
