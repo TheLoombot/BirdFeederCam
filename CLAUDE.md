@@ -21,19 +21,27 @@ Vision / Core ML bird recognition as future work.
 
 ## Functional overview (what the user sees)
 
-- **Live preview** fills the screen.
+- **Live preview** fills the screen and turns on **automatically at launch** (right
+  after camera permission is granted) — the camera does not wait for the Start button.
 - A **draggable yellow box** ("Drag box over feeder") marks the watch region.
   Only this region is monitored for motion.
-- A status card (top-left) shows current state and a running **"Photos saved"** count.
+- A status card (top-left) shows current state, a running **"Photos saved"** count,
+  the destination **album name**, and an **Open in Photos** button.
+- A **"WATCHING" / "PAUSED" badge** (top-right) plus a **red border around the whole
+  screen** make it obvious when motion-saving is armed. (Camera-live vs. armed are
+  distinct states: the preview is always live; Start/Stop only toggles saving.)
 - Bottom control bar:
-  - **Start / Stop** — begins/ends the capture session and motion watching.
+  - **Start / Stop** — arms/disarms *motion saving* (not the camera itself). Stop turns
+    red while armed. The camera stays live either way.
   - **Test Save** — saves the most recent frame immediately (used to confirm
     Photos permissions work).
   - **Sensitivity slider** — adjusts the motion threshold (0.02–0.20; lower = more
     sensitive). The current threshold value is shown live above the slider.
-- When motion in the box exceeds the threshold (and a cooldown has elapsed), the app
-  captures the frame and saves it into a **"Bird Feeder Cam" album** in Photos,
+- When armed and motion in the box exceeds the threshold (and a cooldown has elapsed),
+  the app captures the frame and saves it into a **"Bird Feeder Cam" album** in Photos,
   updating the status and count.
+- **Open in Photos** opens the Photos app — iOS has no public API to deep-link to a
+  specific album, so it can't jump straight to "Bird Feeder Cam".
 
 ## Repository layout
 
@@ -66,8 +74,12 @@ In `CameraMotionController`:
 1. The capture session uses `.photo` preset, BGRA pixel format,
    `alwaysDiscardsLateVideoFrames = true`, and delivers frames on a private
    `DispatchQueue` ("BirdFeederCam.VideoFrames").
+   The session is started as soon as `configureSession()` finishes (`startSession()`),
+   so the preview is live at launch regardless of the Start button.
 2. For each frame (`captureOutput`), the pixel buffer is hopped to the main actor and
-   passed to `handle(pixelBuffer:)`.
+   passed to `handle(pixelBuffer:)`. The grayscale baseline (`previousSample`) refreshes
+   every frame, but motion is only evaluated/saved while armed (`guard isWatching`) —
+   so Start/Stop gates *saving*, not the camera feed.
 3. `downsampleRegion(...)` locks the buffer and samples a **24×24 grid** of grayscale
    values (`(r+g+b)/3`) from inside the normalized `watchRegion`.
 4. The mean absolute per-cell difference vs. the previous frame's grid is normalized to

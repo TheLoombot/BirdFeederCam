@@ -9,7 +9,8 @@ final class CameraMotionController: NSObject, ObservableObject {
 
     @Published var statusText = "Waiting for camera permission"
     @Published var savedCount = 0
-    @Published var isRunning = false
+    @Published var isWatching = false
+    @Published var isCameraLive = false
     @Published var motionThreshold: Double = 0.08 // lower = more sensitive
 
     var watchRegion = CGRect(x: 0.28, y: 0.28, width: 0.44, height: 0.36) // normalized preview coordinates
@@ -20,7 +21,7 @@ final class CameraMotionController: NSObject, ObservableObject {
     private var currentImage: UIImage?
     private var lastSaveDate = Date.distantPast
     private let cooldownSeconds: TimeInterval = 8
-    private let albumName = "Bird Feeder Cam"
+    let albumName = "Bird Feeder Cam"
 
     func requestPermissionAndConfigure() {
         Task {
@@ -30,6 +31,7 @@ final class CameraMotionController: NSObject, ObservableObject {
                 return
             }
             configureSession()
+            startSession()
         }
     }
 
@@ -64,21 +66,31 @@ final class CameraMotionController: NSObject, ObservableObject {
         }
 
         session.commitConfiguration()
-        statusText = "Ready. Drag the box over the feeder, then tap Start."
     }
 
-    func start() {
+    /// Turns the camera on so the live preview appears immediately, independent of watching.
+    private func startSession() {
         guard !session.isRunning else { return }
-        isRunning = true
-        statusText = "Watching feeder region"
         queue.async { [session] in session.startRunning() }
+        isCameraLive = true
+        statusText = isWatching
+            ? "Watching feeder region"
+            : "Camera live. Drag the box over the feeder, then tap Start to save photos."
     }
 
+    /// Arms motion watching: photos are saved when motion is detected inside the box.
+    func start() {
+        guard !isWatching else { return }
+        isWatching = true
+        lastSaveDate = .distantPast
+        statusText = "Watching feeder region"
+    }
+
+    /// Disarms watching. The camera stays live so the preview keeps showing.
     func stop() {
-        guard session.isRunning else { return }
-        isRunning = false
-        statusText = "Stopped"
-        queue.async { [session] in session.stopRunning() }
+        guard isWatching else { return }
+        isWatching = false
+        statusText = "Paused. Camera is live but not saving."
     }
 
     func saveCurrentFrameForTesting() {
@@ -95,6 +107,9 @@ final class CameraMotionController: NSObject, ObservableObject {
 
         defer { previousSample = sample }
         guard let previous = previousSample, previous.count == sample.count else { return }
+
+        // The baseline keeps refreshing via the defer above; only evaluate/save while armed.
+        guard isWatching else { return }
 
         var total = 0
         for i in sample.indices {
